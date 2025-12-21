@@ -46,8 +46,10 @@ impl MessagingManager {
         _message: serde_json::Value,
     ) -> Result<String, Box<dyn Error>> {
         info!("Sending message to: {}", recipient_did);
-        // TODO: Implement message sending using ATM profiles
-        // NOTE: This is a placeholder implementation. Full DIDComm messaging is planned.
+        // 
+        // NOTE: Full DIDComm message sending is planned for Phase 3.
+        // This requires ATM profile setup and routing configuration.
+        // See: https://github.com/daveylupes/trust-sidecar/issues
         Err("DIDComm message sending not yet implemented. Requires ATM profile setup.".into())
     }
 
@@ -56,8 +58,10 @@ impl MessagingManager {
     /// Returns a stream of incoming messages
     pub async fn receive_messages(&self) -> Result<Vec<serde_json::Value>, Box<dyn Error>> {
         info!("Checking for incoming messages...");
-        // TODO: Implement message receiving using ATM profiles
-        // NOTE: This is a placeholder implementation. Full DIDComm messaging is planned.
+        // 
+        // NOTE: Full DIDComm message receiving is planned for Phase 3.
+        // This requires ATM profile setup and message routing.
+        // See: https://github.com/daveylupes/trust-sidecar/issues
         Err("DIDComm message receiving not yet implemented. Requires ATM profile setup.".into())
     }
 
@@ -73,7 +77,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_messaging_manager_creation() {
-        let config = ATMConfig::builder().build().unwrap();
+        let config = ATMConfig::builder()
+            .build()
+            .map_err(|e| format!("Failed to build ATM config: {:?}", e))?;
         let tdk = TDKSharedState::default().await;
         let manager = MessagingManager::new(config, tdk).await;
         assert!(manager.is_ok());

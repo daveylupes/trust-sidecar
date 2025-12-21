@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ad Network Integration Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .ad-slot {
+            margin: 20px 0;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: 3px solid #5a67d8;
+            border-radius: 12px;
+            text-align: center;
+            min-height: 250px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            color: white;
+        }
+        .ad-slot:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+        .ad-slot-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .ad-slot-requirements {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .ad-slot.bid-received {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            border-color: #2f855a;
+        }
+        .ad-slot.bid-received::after {
+            content: "Bid: $" attr(data-bid);
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            color: #2f855a;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .ad-slot.loading {
+            background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%);
+            border-color: #dd6b20;
+        }
+        .ad-slot.loading::before {
+            content: "Processing...";
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            color: #c05621;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+        }
+        .log-entry.success {
+            border-color: #28a745;
+        }
+        .log-entry.error {
+            border-color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ad Network Integration Demo</h1>
+        <p class="subtitle">Test Trust Sidecar integration with ad networks</p>
+        
+        <div id="status" class="status info">
+            Checking Trust Sidecar extension...
+        </div>
+        
+        <div>
+            <button id="checkExtension">Check Extension</button>
+            <button id="checkAdNetwork">Check Ad Network</button>
+            <button id="getStats">Get Statistics</button>
+            <button id="sendBids">Send Bids Manually</button>
+            <button id="clearLogs">Clear Logs</button>
+        </div>
+        
+        <div id="logs" class="log"></div>
+    </div>
+    
+    <div class="container">
+        <h2>Ad Slots</h2>
+        <p>Ad slots will automatically generate proofs and send bid requests when detected.</p>
+        
+        <div class="ad-slot" 
+             data-ad-slot="slot-1" 
+             data-required-credentials="age > 18,interest = crypto">
+            <div class="ad-slot-title">Crypto News Article</div>
+            <div class="ad-slot-requirements">Requires: age > 18, interest = crypto</div>
+        </div>
+        
+        <div class="ad-slot" 
+             data-ad-slot="slot-2" 
+             data-required-credentials="age > 21">
+            <div class="ad-slot-title">Premium Alcohol Brand</div>
+            <div class="ad-slot-requirements">Requires: age > 21</div>
+        </div>
+        
+        <div class="ad-slot" 
+             data-ad-slot="slot-3">
+            <div class="ad-slot-title">General Advertisement</div>
+            <div class="ad-slot-requirements">No credential requirements</div>
+        </div>
+    </div>
+    
+    <script src="ad-network-integration.js"></script>
+    <script>
+        const logs = document.getElementById('logs');
+        const status = document.getElementById('status');
+        
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logs.appendChild(entry);
+            logs.scrollTop = logs.scrollHeight;
+            console.log(message);
+        }
+        
+        function clearLogs() {
+            logs.innerHTML = '';
+        }
+        
+        // Check extension
+        document.getElementById('checkExtension').addEventListener('click', () => {
+            if (typeof window.trustSidecar !== 'undefined') {
+                status.className = 'status success';
+                status.textContent = 'Trust Sidecar extension is available';
+                log('Extension check: Available', 'success');
+            } else {
+                status.className = 'status error';
+                status.textContent = 'Trust Sidecar extension not available';
+                log('Extension check: Not available', 'error');
+            }
+        });
+        
+        // Check ad network
+        document.getElementById('checkAdNetwork').addEventListener('click', async () => {
+            try {
+                const response = await fetch('http://127.0.0.1:8081/health');
+                const data = await response.json();
+                log(`Ad Network: ${data.status} - ${data.service}`, 'success');
+            } catch (error) {
+                log(`Ad Network: Not available - ${error.message}`, 'error');
+            }
+        });
+        
+        // Get statistics
+        document.getElementById('getStats').addEventListener('click', async () => {
+            try {
+                const response = await fetch('http://127.0.0.1:8081/api/v1/stats');
+                const stats = await response.json();
+                log(`Stats: ${stats.total_requests} requests, ${stats.verified_views} verified, $${stats.average_bid.toFixed(2)} avg bid`, 'success');
+            } catch (error) {
+                log(`Stats request failed: ${error.message}`, 'error');
+            }
+        });
+        
+        document.getElementById('clearLogs').addEventListener('click', clearLogs);
+        
+        // Send bids manually
+        document.getElementById('sendBids').addEventListener('click', async () => {
+            if (typeof window.adNetworkIntegration === 'undefined') {
+                log('Ad Network Integration not initialized yet. Wait a moment and try again.', 'error');
+                return;
+            }
+            
+            const adSlots = document.querySelectorAll('[data-ad-slot]');
+            log(`Sending bid requests for ${adSlots.length} ad slots...`, 'info');
+            
+            for (const adSlot of adSlots) {
+                const adSlotId = adSlot.getAttribute('data-ad-slot');
+                const requiredCredentials = adSlot.getAttribute('data-required-credentials')?.split(',').map(c => c.trim()) || [];
+                
+                adSlot.classList.add('loading');
+                
+                try {
+                    await window.adNetworkIntegration.requestBid(adSlotId, window.location.href, requiredCredentials);
+                } catch (error) {
+                    log(`Failed to send bid for ${adSlotId}: ${error.message}`, 'error');
+                }
+            }
+        });
+        
+        // Listen for bid events
+        document.addEventListener('trustSidecarBidReceived', (event) => {
+            const { adSlotId, bid } = event.detail;
+            log(`Bid received for ${adSlotId}: $${bid.bid.toFixed(2)} (${bid.verification_status})`, 'success');
+            
+            // Update ad slot UI
+            const adSlot = document.querySelector(`[data-ad-slot="${adSlotId}"]`);
+            if (adSlot) {
+                adSlot.classList.remove('loading');
+                adSlot.classList.add('bid-received');
+                adSlot.setAttribute('data-bid', bid.bid.toFixed(2));
+                // Update the ::after content with actual bid
+                const style = document.createElement('style');
+                style.textContent = `.ad-slot[data-ad-slot="${adSlotId}"].bid-received::after { content: "Bid: $${bid.bid.toFixed(2)}"; }`;
+                document.head.appendChild(style);
+            }
+        });
+        
+        // Listen for proof generation
+        document.addEventListener('trustSidecarProofGenerated', (event) => {
+            log(`Proof generated for ${event.detail.adSlotId}`, 'success');
+        });
+        
+        // Auto-check on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('checkExtension').click();
+                document.getElementById('checkAdNetwork').click();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 # Rust build artifacts
-/target
+/target/
 **/*.rs.bk
 *.pdb
 Cargo.lock
@@ -17,14 +17,27 @@ Cargo.lock
 .env.local
 .env.*.local
 
-# Logs
+# Logs and runtime files
 *.log
+.log/
+.trust-sidecar.log
+.ad-network.log
+.test-server.log
+
+# PID files
+.pid
+*.pid
+.trust-sidecar.pid
+.ad-network.pid
+.test-server.pid
 
 # Documentation build
 /doc
 
 # Test artifacts
 *.profdata
+*.tmp
+*.bak
 
 # OS files
 Thumbs.db

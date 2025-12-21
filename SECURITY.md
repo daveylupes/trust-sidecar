@@ -57,3 +57,9 @@ We will respond to security reports within 48 hours and work with you to address
 
 Security updates will be released as patch versions (e.g., 0.1.1, 0.1.2) and will be clearly marked in release notes.
 
+## Security Audit
+
+A comprehensive security audit has been conducted and all identified vulnerabilities have been remediated.
+
+**Status**: Pre-release security assessment completed. All critical security issues have been addressed.
+

@@ -1,0 +1,14 @@
+/home/davey/Documents/rowell/ideas/trust-sidecar/ad-network-server/target/debug/deps/serde-d370bab3f6b316e0.d: /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/davey/Documents/rowell/ideas/trust-sidecar/ad-network-server/target/debug/build/serde-f38b255d54569d39/out/private.rs
+
+/home/davey/Documents/rowell/ideas/trust-sidecar/ad-network-server/target/debug/deps/libserde-d370bab3f6b316e0.rlib: /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/davey/Documents/rowell/ideas/trust-sidecar/ad-network-server/target/debug/build/serde-f38b255d54569d39/out/private.rs
+
+/home/davey/Documents/rowell/ideas/trust-sidecar/ad-network-server/target/debug/deps/libserde-d370bab3f6b316e0.rmeta: /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/davey/Documents/rowell/ideas/trust-sidecar/ad-network-server/target/debug/build/serde-f38b255d54569d39/out/private.rs
+
+/home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/home/davey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/home/davey/Documents/rowell/ideas/trust-sidecar/ad-network-server/target/debug/build/serde-f38b255d54569d39/out/private.rs:
+
+# env-dep:OUT_DIR=/home/davey/Documents/rowell/ideas/trust-sidecar/ad-network-server/target/debug/build/serde-f38b255d54569d39/out

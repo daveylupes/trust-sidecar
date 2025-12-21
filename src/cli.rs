@@ -43,6 +43,48 @@ pub enum Commands {
         #[arg(short, long)]
         requirement: String,
     },
+
+    /// Issue a verifiable credential
+    IssueCredential {
+        /// The DID of the subject
+        #[arg(short, long)]
+        subject_did: String,
+
+        /// The claims as JSON string or file path
+        #[arg(short, long)]
+        claims: String,
+
+        /// The DID of the issuer
+        #[arg(short, long)]
+        issuer_did: String,
+
+        /// Path to issuer private key (PEM format)
+        #[arg(short, long)]
+        issuer_key: String,
+
+        /// Type of credential (e.g., "VerifiedUser")
+        #[arg(short, long)]
+        credential_type: String,
+
+        /// Expiration in days (default: 365)
+        #[arg(short, long, default_value = "365")]
+        expiration_days: u32,
+    },
+
+    /// Generate a proof of view (for Ad Tech)
+    GenerateProofOfView {
+        /// The DID of the viewer
+        #[arg(short, long)]
+        viewer_did: String,
+
+        /// Content ID or URL
+        #[arg(short, long)]
+        content_id: String,
+
+        /// Optional credential proof requirement
+        #[arg(short, long)]
+        credential_proof: Option<String>,
+    },
 }
 
 impl Cli {

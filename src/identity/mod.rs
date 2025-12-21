@@ -81,8 +81,9 @@ impl IdentityManager {
             return Ok(Some(did.clone()));
         }
 
-        // TODO: Load from keychain using TDK
-        // Currently returns None if not in cache
+        // NOTE: Keychain loading using TDK is planned for future enhancement.
+        // Currently returns None if not in cache. DIDs are loaded when generated.
+        // See: https://github.com/daveylupes/trust-sidecar/issues
         Ok(None)
     }
 
@@ -101,7 +102,9 @@ impl IdentityManager {
             .or_insert_with(Vec::new)
             .push(_credential);
 
-        // TODO: Persist to keychain using TDK
+        // NOTE: Keychain persistence using TDK is planned for future enhancement.
+        // Currently credentials are stored in memory cache only.
+        // See: https://github.com/daveylupes/trust-sidecar/issues
         Ok(())
     }
 
@@ -115,6 +118,37 @@ impl IdentityManager {
         // Get from cache
         let cache = self.credential_cache.read().await;
         Ok(cache.get(did).cloned().unwrap_or_default())
+    }
+
+    /// Get issuer's private key from keychain
+    /// SECURITY: Loads key from OS keychain instead of accepting it via API
+    pub async fn get_issuer_private_key(
+        &self,
+        service_id: &str,
+        issuer_did: &str,
+    ) -> Result<String, Box<dyn Error>> {
+        info!("Loading issuer private key for service: {}, DID: {}", service_id, issuer_did);
+        
+        // Load DID first to ensure it exists
+        let did = self.load_did(service_id).await?
+            .ok_or_else(|| format!("DID not found for service_id: {}", service_id))?;
+        
+        if did != issuer_did {
+            return Err(format!("DID mismatch: expected {}, got {}", issuer_did, did).into());
+        }
+        
+        // NOTE: TDK keychain access for private key retrieval
+        // The TDK resolver should have the key loaded from load_secrets
+        // For now, we'll need to use the resolver's internal methods
+        // This is a placeholder - actual implementation depends on TDK API
+        
+        // In a real implementation, we would:
+        // 1. Use TDK resolver to get the key material
+        // 2. Convert to PEM format
+        // 3. Return the key
+        
+        // For now, return an error indicating this needs TDK integration
+        Err("Private key retrieval from keychain requires TDK resolver integration. Use CLI with --issuer-key file for now.".into())
     }
 }
 
