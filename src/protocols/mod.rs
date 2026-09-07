@@ -4,17 +4,121 @@
 //! Implements SD-JWT (Selective Disclosure JWT) for privacy-preserving credential verification.
 
 use std::error::Error;
-use tracing::info;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use chrono::Utc;
+use jsonwebtoken::{encode, decode, Header, Algorithm, EncodingKey, DecodingKey, Validation};
+use serde::{Deserialize, Serialize};
+use sha2::{Sha256, Digest};
+use tracing::{info, warn};
+
+mod credentials;
+mod agent_auth;
+mod proof_of_action;
+
+pub use credentials::TypedCredential;
+pub use agent_auth::{SpendAuthorizationClaims, ProposedTransaction};
+pub use proof_of_action::ProofOfAction;
+
+/// JWT Claims for Verifiable Credentials
+#[derive(Debug, Serialize, Deserialize)]
+struct CredentialClaims {
+    /// Issuer DID
+    iss: String,
+    /// Subject DID
+    sub: String,
+    /// Issued at timestamp
+    iat: i64,
+    /// Expiration timestamp
+    exp: i64,
+    /// Credential type
+    vc_type: String,
+    /// Credential claims/attributes
+    #[serde(flatten)]
+    claims: serde_json::Value,
+}
+
+/// Proof of View structure for Ad Tech
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProofOfView {
+    /// DID of the viewer
+    pub viewer_did: String,
+    /// URL or identifier of the viewed content
+    pub content_id: String,
+    /// Timestamp of the view
+    pub timestamp: i64,
+    /// Cryptographic proof hash
+    pub proof_hash: String,
+    /// Optional credential proof
+    pub credential_proof: Option<String>,
+}
 
 /// Protocol manager for credential verification and zero-knowledge proofs
 ///
 /// Handles SD-JWT credentials and selective disclosure proofs.
-pub struct ProtocolManager;
+pub struct ProtocolManager {
+    /// Default issuer DID (can be set when issuing credentials)
+    default_issuer_did: Option<String>,
+    /// SECURITY: Registry of used proof hashes to prevent replay attacks.
+    /// Maps proof_hash -> insertion timestamp, so stale entries can be evicted by age
+    /// instead of wiping the whole registry (which would reopen the replay window).
+    used_proof_hashes: Arc<RwLock<HashMap<String, i64>>>,
+}
 
 impl ProtocolManager {
+    /// Maximum age (seconds) a proof's timestamp may have and still be considered fresh
+    const PROOF_MAX_AGE_SECS: i64 = 3600;
+    /// Allowed clock skew (seconds) for a proof timestamp in the future
+    const PROOF_CLOCK_SKEW_SECS: i64 = 300;
+
     /// Create a new ProtocolManager
     pub fn new() -> Self {
-        Self
+        Self {
+            default_issuer_did: None,
+            used_proof_hashes: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Create a new ProtocolManager with a default issuer DID
+    pub fn with_issuer(issuer_did: String) -> Self {
+        Self {
+            default_issuer_did: Some(issuer_did),
+            used_proof_hashes: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// SECURITY: Shared replay-check + timestamp-bounds + registration used by every
+    /// hash-based proof type (ProofOfView, ProofOfAction). Evicts stale entries by age
+    /// on each call rather than clearing the whole registry once it grows large, so
+    /// previously-used proofs can never become replayable again just because the
+    /// registry happened to fill up.
+    async fn register_proof_hash_if_fresh(&self, hash: &str, timestamp: i64) -> bool {
+        let now = Utc::now().timestamp();
+
+        // SECURITY: Check timestamp is not in the future (clock skew protection)
+        if timestamp > now + Self::PROOF_CLOCK_SKEW_SECS {
+            return false;
+        }
+        // SECURITY: Check timestamp is not too old
+        if now - timestamp > Self::PROOF_MAX_AGE_SECS {
+            return false;
+        }
+
+        let mut used = self.used_proof_hashes.write().await;
+
+        // SECURITY: Check for replay attack - has this proof hash been used before?
+        if used.contains_key(hash) {
+            warn!("Proof hash already used - potential replay attack");
+            return false;
+        }
+
+        // Evict anything older than the max validity window before inserting the new entry
+        let cutoff = now - (Self::PROOF_MAX_AGE_SECS + Self::PROOF_CLOCK_SKEW_SECS);
+        used.retain(|_, ts| *ts >= cutoff);
+        used.insert(hash.to_string(), now);
+
+        true
     }
 
     /// Verify a credential against a requirement
@@ -41,28 +145,89 @@ impl ProtocolManager {
     ) -> Result<bool, Box<dyn Error>> {
         info!("Verifying requirement: {} against credential", requirement);
 
+        // SECURITY: Input validation should be done before calling this method
+        // This method assumes requirement has been validated by validate_requirement()
+        
         // Basic implementation: Parse the credential as JSON and check simple requirements
-        // TODO: Implement full SD-JWT verification using bh-sd-jwt crate
-        // This provides zero-knowledge proof functionality for Ad Tech use cases
+        // 
+        // NOTE: Full SD-JWT verification using bh-sd-jwt crate is planned for Phase 3.
+        // This will provide zero-knowledge proof functionality for Ad Tech use cases.
+        // See: https://github.com/daveylupes/trust-sidecar/issues
 
         // Parse as JSON and perform basic requirement checks
-        if let Ok(cred_json) = serde_json::from_str::<serde_json::Value>(credential) {
-            // Simple requirement parsing (e.g., "age > 18")
-            if requirement.contains(">") {
-                let parts: Vec<&str> = requirement.split('>').map(|s| s.trim()).collect();
-                if parts.len() == 2 {
-                    let field = parts[0];
-                    if let Ok(threshold) = parts[1].parse::<i64>() {
+        let cred_json = serde_json::from_str::<serde_json::Value>(credential)
+            .map_err(|e| format!("Invalid credential format: {}", e))?;
+
+        // SECURITY: Whitelist-based requirement parsing
+        // Only allow specific operators: >, <, =, !=, >=, <=
+        // Field names must be alphanumeric with underscores
+        
+        // Simple requirement parsing (e.g., "age > 18")
+        if requirement.contains(">=") {
+            let parts: Vec<&str> = requirement.split(">=").map(|s| s.trim()).collect();
+            if parts.len() == 2 {
+                let field = parts[0].trim();
+                if field.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    if let Ok(threshold) = parts[1].trim().parse::<i64>() {
+                        if let Some(value) = cred_json.get(field).and_then(|v| v.as_i64()) {
+                            return Ok(value >= threshold);
+                        }
+                    }
+                }
+            }
+        } else if requirement.contains("<=") {
+            let parts: Vec<&str> = requirement.split("<=").map(|s| s.trim()).collect();
+            if parts.len() == 2 {
+                let field = parts[0].trim();
+                if field.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    if let Ok(threshold) = parts[1].trim().parse::<i64>() {
+                        if let Some(value) = cred_json.get(field).and_then(|v| v.as_i64()) {
+                            return Ok(value <= threshold);
+                        }
+                    }
+                }
+            }
+        } else if requirement.contains("!=") {
+            let parts: Vec<&str> = requirement.split("!=").map(|s| s.trim()).collect();
+            if parts.len() == 2 {
+                let field = parts[0].trim();
+                if field.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    let expected = parts[1].trim().trim_matches('"').trim_matches('\'');
+                    if let Some(value) = cred_json.get(field).and_then(|v| v.as_str()) {
+                        return Ok(value != expected);
+                    }
+                }
+            }
+        } else if requirement.contains(">") && !requirement.contains(">=") {
+            let parts: Vec<&str> = requirement.split('>').map(|s| s.trim()).collect();
+            if parts.len() == 2 {
+                let field = parts[0].trim();
+                if field.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    if let Ok(threshold) = parts[1].trim().parse::<i64>() {
                         if let Some(value) = cred_json.get(field).and_then(|v| v.as_i64()) {
                             return Ok(value > threshold);
                         }
                     }
                 }
-            } else if requirement.contains("=") {
-                let parts: Vec<&str> = requirement.split('=').map(|s| s.trim()).collect();
-                if parts.len() == 2 {
-                    let field = parts[0];
-                    let expected = parts[1].trim_matches('"').trim_matches('\'');
+            }
+        } else if requirement.contains("<") && !requirement.contains("<=") {
+            let parts: Vec<&str> = requirement.split('<').map(|s| s.trim()).collect();
+            if parts.len() == 2 {
+                let field = parts[0].trim();
+                if field.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    if let Ok(threshold) = parts[1].trim().parse::<i64>() {
+                        if let Some(value) = cred_json.get(field).and_then(|v| v.as_i64()) {
+                            return Ok(value < threshold);
+                        }
+                    }
+                }
+            }
+        } else if requirement.contains("=") && !requirement.contains("!=") && !requirement.contains(">=") && !requirement.contains("<=") {
+            let parts: Vec<&str> = requirement.split('=').map(|s| s.trim()).collect();
+            if parts.len() == 2 {
+                let field = parts[0].trim();
+                if field.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    let expected = parts[1].trim().trim_matches('"').trim_matches('\'');
                     if let Some(value) = cred_json.get(field).and_then(|v| v.as_str()) {
                         return Ok(value == expected);
                     }
@@ -93,8 +258,10 @@ impl ProtocolManager {
             "Generating selective disclosure proof for: {:?}",
             _disclosure_requirements
         );
-        // TODO: Implement SD-JWT proof generation
-        // This enables zero-knowledge proofs for ad targeting without sharing raw data
+        // 
+        // NOTE: SD-JWT proof generation is planned for Phase 3.
+        // This will enable zero-knowledge proofs for ad targeting without sharing raw data.
+        // See: https://github.com/daveylupes/trust-sidecar/issues
         Ok("proof_placeholder".to_string())
     }
 
@@ -105,20 +272,166 @@ impl ProtocolManager {
     /// # Arguments
     /// * `subject_did` - The DID of the credential subject
     /// * `claims` - The claims to include in the credential
-    /// * `issuer_key` - The private key of the issuer
+    /// * `issuer_did` - The DID of the issuer (optional, uses default if not provided)
+    /// * `issuer_private_key` - The private key of the issuer (PEM format)
+    /// * `credential_type` - Type of credential (e.g., "VerifiedUser", "CryptoWhale")
+    /// * `expiration_days` - Number of days until expiration (default: 365)
     ///
     /// # Returns
-    /// A signed SD-JWT credential
+    /// A signed JWT credential
     pub async fn issue_credential(
         &self,
         subject_did: &str,
-        _claims: serde_json::Value,
-        _issuer_key: &str,
+        claims: serde_json::Value,
+        issuer_did: Option<&str>,
+        issuer_private_key: &str,
+        credential_type: &str,
+        expiration_days: Option<u32>,
     ) -> Result<String, Box<dyn Error>> {
         info!("Issuing credential for DID: {}", subject_did);
-        // TODO: Implement credential issuance
-        // NOTE: This is a placeholder implementation. Full credential issuance is planned.
-        Err("Credential issuance not yet implemented".into())
+
+        let issuer = issuer_did
+            .or(self.default_issuer_did.as_deref())
+            .ok_or("No issuer DID provided")?;
+
+        let now = Utc::now();
+        let exp_days = expiration_days.unwrap_or(365);
+        let exp = now + chrono::Duration::days(exp_days as i64);
+
+        let credential_claims = CredentialClaims {
+            iss: issuer.to_string(),
+            sub: subject_did.to_string(),
+            iat: now.timestamp(),
+            exp: exp.timestamp(),
+            vc_type: credential_type.to_string(),
+            claims,
+        };
+
+        // Encode the JWT using ES256 (ECDSA P-256)
+        let header = Header::new(Algorithm::ES256);
+        let encoding_key = EncodingKey::from_ec_pem(issuer_private_key.as_bytes())
+            .map_err(|e| format!("Failed to parse issuer key: {}", e))?;
+
+        let token = encode(&header, &credential_claims, &encoding_key)
+            .map_err(|e| format!("Failed to encode credential: {}", e))?;
+
+        info!("Credential issued successfully for subject: {}", subject_did);
+        Ok(token)
+    }
+
+    /// Verify a JWT credential
+    ///
+    /// # Arguments
+    /// * `credential` - The JWT credential to verify
+    /// * `issuer_public_key` - The public key of the issuer (PEM format)
+    ///
+    /// # Returns
+    /// The decoded claims if valid
+    pub async fn verify_credential(
+        &self,
+        credential: &str,
+        issuer_public_key: &str,
+    ) -> Result<CredentialClaims, Box<dyn Error>> {
+        info!("Verifying credential...");
+
+        let validation = Validation::new(Algorithm::ES256);
+        let decoding_key = DecodingKey::from_ec_pem(issuer_public_key.as_bytes())
+            .map_err(|e| format!("Failed to parse issuer public key: {}", e))?;
+
+        let token_data = decode::<CredentialClaims>(credential, &decoding_key, &validation)
+            .map_err(|e| format!("Failed to verify credential: {}", e))?;
+
+        // Check expiration
+        let now = Utc::now().timestamp();
+        if token_data.claims.exp < now {
+            return Err("Credential has expired".into());
+        }
+
+        info!("Credential verified successfully");
+        Ok(token_data.claims)
+    }
+
+    /// Generate a proof of view for Ad Tech
+    ///
+    /// Creates a cryptographic proof that a specific content was viewed by a DID.
+    /// This enables verifiable ad impressions without revealing user identity.
+    ///
+    /// # Arguments
+    /// * `viewer_did` - The DID of the viewer
+    /// * `content_id` - URL or identifier of the viewed content
+    /// * `credential_proof` - Optional credential proof (e.g., "age > 18")
+    ///
+    /// # Returns
+    /// A ProofOfView structure with cryptographic proof
+    pub async fn generate_proof_of_view(
+        &self,
+        viewer_did: &str,
+        content_id: &str,
+        credential_proof: Option<&str>,
+    ) -> Result<ProofOfView, Box<dyn Error>> {
+        info!("Generating proof of view for content: {}", content_id);
+
+        let timestamp = Utc::now().timestamp();
+
+        // Create a hash of the view data for proof
+        let mut hasher = Sha256::new();
+        hasher.update(viewer_did.as_bytes());
+        hasher.update(content_id.as_bytes());
+        hasher.update(timestamp.to_string().as_bytes());
+        if let Some(proof) = credential_proof {
+            hasher.update(proof.as_bytes());
+        }
+        let proof_hash = format!("{:x}", hasher.finalize());
+
+        let proof = ProofOfView {
+            viewer_did: viewer_did.to_string(),
+            content_id: content_id.to_string(),
+            timestamp,
+            proof_hash,
+            credential_proof: credential_proof.map(|s| s.to_string()),
+        };
+
+        info!("Proof of view generated successfully");
+        Ok(proof)
+    }
+
+    /// Verify a proof of view
+    ///
+    /// # Arguments
+    /// * `proof` - The ProofOfView to verify
+    ///
+    /// # Returns
+    /// True if the proof is valid
+    /// 
+    /// SECURITY: Implements replay protection using proof hash registry
+    pub async fn verify_proof_of_view(&self, proof: &ProofOfView) -> Result<bool, Box<dyn Error>> {
+        info!("Verifying proof of view...");
+
+        // Recompute the hash
+        let mut hasher = Sha256::new();
+        hasher.update(proof.viewer_did.as_bytes());
+        hasher.update(proof.content_id.as_bytes());
+        hasher.update(proof.timestamp.to_string().as_bytes());
+        if let Some(ref cred_proof) = proof.credential_proof {
+            hasher.update(cred_proof.as_bytes());
+        }
+        let computed_hash = format!("{:x}", hasher.finalize());
+
+        // Check if hash matches
+        if computed_hash != proof.proof_hash {
+            return Ok(false);
+        }
+
+        // SECURITY: replay + timestamp-bounds check, shared with other proof types
+        if !self
+            .register_proof_hash_if_fresh(&proof.proof_hash, proof.timestamp)
+            .await
+        {
+            return Ok(false);
+        }
+
+        info!("Proof of view verified successfully");
+        Ok(true)
     }
 }
 

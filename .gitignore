@@ -1,5 +1,7 @@
 # Rust build artifacts
-/target
+# (unanchored so it also catches nested crates, e.g. ad-network-server/target/ —
+# a nested target/ dir was previously committed by accident; see git history)
+target/
 **/*.rs.bk
 *.pdb
 Cargo.lock
@@ -17,14 +19,30 @@ Cargo.lock
 .env.local
 .env.*.local
 
-# Logs
+# Logs and runtime files
 *.log
+.log/
+.trust-sidecar.log
+.ad-network.log
+.test-server.log
+
+# PID files
+.pid
+*.pid
+.trust-sidecar.pid
+.ad-network.pid
+.test-server.pid
 
 # Documentation build
 /doc
 
 # Test artifacts
 *.profdata
+*.tmp
+*.bak
 
 # OS files
 Thumbs.db
+
+# Internal-only working notes (not for public repo)
+/review.md

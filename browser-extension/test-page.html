@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trust Sidecar Extension Test Page</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border-left: 4px solid #007bff;
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            background: #fff;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        .error {
+            border-color: #dc3545;
+            background: #f8d7da;
+        }
+        .ad-slot {
+            margin: 20px 0;
+            padding: 20px;
+            background: #e9ecef;
+            border: 2px dashed #6c757d;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .ad-slot::before {
+            content: "Ad Slot";
+            display: block;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status.ready {
+            background: #28a745;
+            color: white;
+        }
+        .status.not-ready {
+            background: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Trust Sidecar Extension Test Page</h1>
+        <p class="subtitle">Test the browser extension functionality</p>
+
+        <div class="test-section">
+            <h2>1. Extension Status</h2>
+            <p>Check if the Trust Sidecar extension is loaded and the API is available.</p>
+            <button id="checkStatus">Check Status</button>
+            <div id="statusResult" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>2. Get Browser DID</h2>
+            <p>Get or generate a DID for this browser instance.</p>
+            <button id="getDid">Get DID</button>
+            <div id="didResult" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>3. Generate Proof of View</h2>
+            <p>Generate a cryptographic proof that this page was viewed.</p>
+            <button id="generateProof">Generate Proof</button>
+            <div id="proofResult" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>4. Verify Credential</h2>
+            <p>Test credential verification with a sample credential.</p>
+            <button id="verifyCredential">Verify Credential</button>
+            <div id="verifyResult" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>5. Ad Slot Detection</h2>
+            <p>Test automatic ad slot detection and proof generation.</p>
+            <div class="ad-slot" data-ad-slot="test-slot-123">
+                This is a test ad slot. The extension should detect it and generate a proof.
+            </div>
+            <div id="adSlotResult" class="result" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>6. Custom Event Listener</h2>
+            <p>Listen for proof generation events from the extension.</p>
+            <button id="startListening">Start Listening</button>
+            <div id="eventResult" class="result" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Check if extension is loaded
+        function checkExtension() {
+            return typeof window.trustSidecar !== 'undefined';
+        }
+
+        // Display result
+        function showResult(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = 'result ' + (isError ? 'error' : 'success');
+            element.textContent = typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
+        }
+
+        // Check status
+        document.getElementById('checkStatus').addEventListener('click', async () => {
+            // Wait a bit for the extension to inject the API
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            const hasExtension = checkExtension();
+            if (!hasExtension) {
+                showResult('statusResult', 'Trust Sidecar extension not detected.\n\nMake sure:\n1. Extension is loaded in chrome://extensions/\n2. Extension is enabled\n3. Page is refreshed after loading extension', true);
+                return;
+            }
+
+            try {
+                // Try to generate a proof as a test
+                const proof = await window.trustSidecar.generateProof('test-status-check');
+                showResult('statusResult', {
+                    status: 'Extension loaded and working!',
+                    trustSidecarAPI: 'Available',
+                    testProof: proof
+                });
+            } catch (error) {
+                showResult('statusResult', {
+                    status: 'Extension loaded but API call failed',
+                    error: error.message,
+                    note: 'Check browser console (F12) for details'
+                }, true);
+            }
+        });
+
+        // Get DID
+        document.getElementById('getDid').addEventListener('click', async () => {
+            if (!checkExtension()) {
+                showResult('didResult', 'Extension not loaded. Please load the extension first.', true);
+                return;
+            }
+
+            try {
+                // Use the direct getDid method
+                const did = await window.trustSidecar.getDid();
+                showResult('didResult', {
+                    success: true,
+                    did: did,
+                    note: 'DID retrieved successfully'
+                });
+            } catch (error) {
+                showResult('didResult', {
+                    error: error.message,
+                    note: 'Check browser console (F12) for details. Make sure Trust Sidecar server is running.'
+                }, true);
+            }
+        });
+
+        // Generate proof
+        document.getElementById('generateProof').addEventListener('click', async () => {
+            if (!checkExtension()) {
+                showResult('proofResult', 'Extension not loaded', true);
+                return;
+            }
+
+            try {
+                const contentId = window.location.href;
+                const proof = await window.trustSidecar.generateProof(contentId, 'age > 18');
+                showResult('proofResult', {
+                    success: true,
+                    proof: proof
+                });
+            } catch (error) {
+                showResult('proofResult', {
+                    error: error.message
+                }, true);
+            }
+        });
+
+        // Verify credential
+        document.getElementById('verifyCredential').addEventListener('click', async () => {
+            if (!checkExtension()) {
+                showResult('verifyResult', 'Extension not loaded', true);
+                return;
+            }
+
+            try {
+                const credential = JSON.stringify({ age: 25, interest: 'crypto' });
+                const verified = await window.trustSidecar.verifyCredential(credential, 'age > 18');
+                showResult('verifyResult', {
+                    credential: JSON.parse(credential),
+                    requirement: 'age > 18',
+                    verified: verified
+                });
+            } catch (error) {
+                showResult('verifyResult', {
+                    error: error.message
+                }, true);
+            }
+        });
+
+        // Listen for ad slot events
+        let eventListenerActive = false;
+        document.getElementById('startListening').addEventListener('click', () => {
+            if (eventListenerActive) {
+                showResult('eventResult', 'Already listening for events...');
+                return;
+            }
+
+            document.addEventListener('trustSidecarProofGenerated', (event) => {
+                showResult('eventResult', {
+                    event: 'trustSidecarProofGenerated',
+                    data: event.detail
+                });
+            });
+
+            eventListenerActive = true;
+            showResult('eventResult', {
+                status: 'Listening for trustSidecarProofGenerated events...',
+                note: 'Ad slots on this page should trigger events automatically'
+            });
+        });
+
+        // Check extension on load (with delay to allow injection)
+        window.addEventListener('load', () => {
+            console.log('Page loaded, checking for extension...');
+            setTimeout(() => {
+                if (checkExtension()) {
+                    console.log('Trust Sidecar extension detected');
+                } else {
+                    console.warn('Trust Sidecar extension not detected');
+                    console.warn('Debugging info:');
+                    console.warn('  - window.trustSidecar:', typeof window.trustSidecar);
+                    console.warn('  - Check browser console for content script messages');
+                    console.warn('  - Look for: "Trust Sidecar content script loaded"');
+                    console.warn('  - Make sure extension is loaded and enabled in chrome://extensions/');
+                }
+            }, 2000);
+        });
+        
+        // Also check periodically in case extension loads after page
+        let checkCount = 0;
+        const checkInterval = setInterval(() => {
+            checkCount++;
+            if (checkExtension()) {
+                clearInterval(checkInterval);
+                console.log('Trust Sidecar extension detected (delayed check #' + checkCount + ')');
+            } else if (checkCount > 20) {
+                clearInterval(checkInterval);
+                console.warn('Extension still not detected after 10 seconds');
+                console.warn('Try:');
+                console.warn('  1. Reload extension in chrome://extensions/');
+                console.warn('  2. Refresh this page');
+                console.warn('  3. Check console for content script messages');
+            }
+        }, 500);
+    </script>
+</body>
+</html>
+
+
+
